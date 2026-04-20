@@ -1,0 +1,101 @@
+{
+  "name": "unused-code-finder",
+  "displayName": "unused-code-finder",
+  "description": "",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.114.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:javascript",
+    "onLanguage:typescript",
+    "onLanguage:javascriptreact",
+    "onLanguage:typescriptreact"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "unused.removeCurrent",
+        "title": "Remove Unused Line"
+      },
+      {
+        "command": "unused.removeAll",
+        "title": "Remove All Unused Code"
+      },
+      {
+        "command": "unused.refresh",
+        "title": "Refresh Unused List"
+      },
+      {
+        "command": "unused.deleteFromSidebar",
+        "title": "Delete Unused"
+      },
+      {
+        "command": "unused.removeAllFromSidebar",
+        "when": "view == unusedSidebar",
+        "group": "navigation",
+        "title": "Remove All"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "unused-sidebar",
+          "title": "Unused Code",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "unused-sidebar": [
+        {
+          "id": "unusedSidebar",
+          "name": "Unused Items"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "unused.removeAllFromSidebar",
+          "when": "view == unusedSidebar",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "unused.deleteFromSidebar",
+          "when": "view == unusedSidebar && viewItem == unusedItem",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/babel__traverse": "^7.28.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.19.17",
+    "@types/vscode": "^1.116.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^9.39.3",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.29.2",
+    "@babel/traverse": "^7.29.0"
+  }
+}
