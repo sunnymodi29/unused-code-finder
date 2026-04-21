@@ -1,71 +1,164 @@
-# unused-code-finder README
+# 🚀 Unused Code Finder
 
-This is the README for your extension "unused-code-finder". After writing up a brief description, we recommend including the following sections.
+<p align="center">
+  <img src="resources/icon.png" width="120" />
+</p>
 
-## Features
+<p align="center">
+  <b>Detect and remove unused code instantly in your project</b><br/>
+  Built for speed, accuracy, and developer productivity ⚡
+</p>
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
-
-For example if there is an image subfolder under your extension project workspace:
-
-\!\[feature X\]\(images/feature-x.png\)
-
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
-
-## Requirements
-
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
-
-## Extension Settings
-
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+<p align="center">
+  <a href="https://marketplace.visualstudio.com/items?itemName=sunnymodi.unused-code-finder">
+    <img src="https://img.shields.io/visual-studio-marketplace/v/sunnymodi.unused-code-finder?label=Version&style=for-the-badge" />
+  </a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=sunnymodi.unused-code-finder">
+    <img src="https://img.shields.io/visual-studio-marketplace/d/sunnymodi.unused-code-finder?label=Downloads&style=for-the-badge" />
+  </a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=sunnymodi.unused-code-finder">
+    <img src="https://img.shields.io/visual-studio-marketplace/r/sunnymodi.unused-code-finder?label=Rating&style=for-the-badge" />
+  </a>
+</p>
 
 ---
 
-## Following extension guidelines
+## ✨ Features
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+* 🔍 **Detect unused variables, functions, and imports**
+* 🧹 **Remove unused code with one click**
+* 📂 **Sidebar view of all unused items**
+* ⚡ **Fast scanning using AST parsing**
+* 🔄 **Real-time refresh of unused code**
+* 🧠 Works with:
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+  * JavaScript
+  * TypeScript
+  * React (JSX/TSX)
 
-## Working with Markdown
+---
 
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
+## 🖼️ Preview
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
+> Add screenshots/GIFs here to boost installs (very important)
 
-## For more information
+### Sidebar View
 
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+![Sidebar Preview](resources/sidebar-preview.png)
 
-**Enjoy!**
+### Code Cleanup
+
+![Cleanup Preview](resources/cleanup-preview.png)
+
+---
+
+## ⚡ Commands
+
+| Command                  | Description                  |
+| ------------------------ | ---------------------------- |
+| `Remove Unused Line`     | Removes selected unused line |
+| `Remove All Unused Code` | Cleans entire file           |
+| `Refresh Unused List`    | Rescans project              |
+| `Delete Unused`          | Removes item from sidebar    |
+| `Remove All (Sidebar)`   | Clears all unused items      |
+
+---
+
+## 🧩 How It Works
+
+Unused Code Finder uses **AST (Abstract Syntax Tree)** parsing to:
+
+1. Analyze your code structure
+2. Identify unused declarations
+3. Provide actionable cleanup options
+
+👉 No regex hacks. Clean and accurate detection.
+
+---
+
+## 📦 Installation
+
+1. Open **VS Code**
+2. Go to **Extensions**
+3. Search: `Unused Code Finder`
+4. Click **Install**
+
+Or install directly from marketplace:
+
+👉 https://marketplace.visualstudio.com/items?itemName=sunnymodi.unused-code-finder
+
+---
+
+## ⚙️ Requirements
+
+* VS Code `^1.80.0` or above
+* Works best with JavaScript & TypeScript projects
+
+---
+
+## 🐞 Known Issues
+
+* Large files may take slightly longer to scan
+* Complex dynamic imports may not always be detected
+
+---
+
+## 🗺️ Roadmap
+
+* ✅ Auto-fix suggestions
+* 🔜 Workspace-wide scanning
+* 🔜 AI-based smart cleanup
+* 🔜 Performance improvements
+
+---
+
+## 📝 Release Notes
+
+### 1.0.0
+
+* Initial release 🎉
+* Unused code detection
+* Sidebar integration
+* Cleanup commands
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome!
+
+1. Fork the repo
+2. Create a feature branch
+3. Submit a PR
+
+---
+
+## 👨‍💻 Author
+
+**Sunny Modi**
+
+* 💼 Frontend Developer
+* 🚀 Building developer tools
+* 🌐 Focused on productivity & clean code
+
+---
+
+## ⭐ Support
+
+If you find this useful:
+
+👉 Star the repo
+👉 Share with other developers
+👉 Leave a review on Marketplace
+
+---
+
+## 📜 License
+
+MIT License
+
+---
+
+<p align="center">
+  Made with ❤️ by <b>Sunny Modi</b>
+</p>
