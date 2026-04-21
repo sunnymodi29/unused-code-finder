@@ -1,4 +1,4 @@
-# 🚀 Unused Code Finder
+# 🚀 Scan Unused Code
 
 <p align="center">
   <img src="resources/icon.png" width="120" />
@@ -10,14 +10,14 @@
 </p>
 
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=sunnymodi.unused-code-finder">
-    <img src="https://img.shields.io/visual-studio-marketplace/v/sunnymodi.unused-code-finder?label=Version&style=for-the-badge" />
+  <a href="https://marketplace.visualstudio.com/items?itemName=sunnymodi.scan-unused-code">
+    <img src="https://img.shields.io/visual-studio-marketplace/v/sunnymodi.scan-unused-code?label=Version&style=for-the-badge" />
   </a>
-  <a href="https://marketplace.visualstudio.com/items?itemName=sunnymodi.unused-code-finder">
-    <img src="https://img.shields.io/visual-studio-marketplace/d/sunnymodi.unused-code-finder?label=Downloads&style=for-the-badge" />
+  <a href="https://marketplace.visualstudio.com/items?itemName=sunnymodi.scan-unused-code">
+    <img src="https://img.shields.io/visual-studio-marketplace/d/sunnymodi.scan-unused-code?label=Downloads&style=for-the-badge" />
   </a>
-  <a href="https://marketplace.visualstudio.com/items?itemName=sunnymodi.unused-code-finder">
-    <img src="https://img.shields.io/visual-studio-marketplace/r/sunnymodi.unused-code-finder?label=Rating&style=for-the-badge" />
+  <a href="https://marketplace.visualstudio.com/items?itemName=sunnymodi.scan-unused-code">
+    <img src="https://img.shields.io/visual-studio-marketplace/r/sunnymodi.scan-unused-code?label=Rating&style=for-the-badge" />
   </a>
 </p>
 
@@ -36,7 +36,7 @@
   * TypeScript
   * React (JSX/TSX)
 
----
+<!-- ---
 
 ## 🖼️ Preview
 
@@ -48,7 +48,7 @@
 
 ### Code Cleanup
 
-![Cleanup Preview](resources/cleanup-preview.png)
+![Cleanup Preview](resources/cleanup-preview.png) -->
 
 ---
 
@@ -80,12 +80,12 @@ Unused Code Finder uses **AST (Abstract Syntax Tree)** parsing to:
 
 1. Open **VS Code**
 2. Go to **Extensions**
-3. Search: `Unused Code Finder`
+3. Search: `Scan Unused Code`
 4. Click **Install**
 
 Or install directly from marketplace:
 
-👉 https://marketplace.visualstudio.com/items?itemName=sunnymodi.unused-code-finder
+👉 https://marketplace.visualstudio.com/items?itemName=sunnymodi.scan-unused-code
 
 ---
 
