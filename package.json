@@ -1,8 +1,8 @@
 {
   "name": "scan-unused-code",
-  "displayName": "Unused Code Finder",
+  "displayName": "Scan Unused Code",
   "description": "Detect and remove unused code in JavaScript and TypeScript projects directly from VS Code.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publisher": "sunnymodi",
   "license": "MIT",
   "icon": "resources/icon.png",
