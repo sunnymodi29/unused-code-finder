@@ -21,6 +21,43 @@ function getRange(node: any, fallback?: any) {
   };
 }
 
+// 🔥 GET ALL USED IDENTIFIERS (cross-file tracking)
+export function getAllUsedIdentifiers(filePath: string): Set<string> {
+  try {
+    const code = fs.readFileSync(filePath, "utf-8");
+
+    const ast = parser.parse(code, {
+      sourceType: "module",
+      plugins: ["jsx", "typescript"],
+    });
+
+    const used = new Set<string>();
+
+    traverse(ast, {
+      Identifier(path) {
+        const parent = path.parent;
+
+        // Skip declarations themselves
+        if (
+          (parent.type === "VariableDeclarator" &&
+            parent.id === path.node) ||
+          (parent.type === "FunctionDeclaration" &&
+            parent.id === path.node) ||
+          parent.type.includes("Import")
+        ) {
+          return;
+        }
+
+        used.add(path.node.name);
+      },
+    });
+
+    return used;
+  } catch {
+    return new Set();
+  }
+}
+
 export function findUnusedVariables(filePath: string) {
   const code = fs.readFileSync(filePath, "utf-8");
 

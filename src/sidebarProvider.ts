@@ -19,17 +19,19 @@ export class UnusedSidebarProvider
   getChildren(element?: any): Thenable<any[]> {
     if (!element) {
       return Promise.resolve(
-        Object.keys(unusedCache).map((file) => {
-          const fileItem = new vscode.TreeItem(
-            file.split("\\").pop() || file,
-            vscode.TreeItemCollapsibleState.Collapsed
-          );
+        Object.keys(unusedCache)
+          .filter((file) => unusedCache[file].length > 0)
+          .map((file) => {
+            const fileItem = new vscode.TreeItem(
+              file.split("\\").pop() || file,
+              vscode.TreeItemCollapsibleState.Collapsed
+            );
 
-          fileItem.contextValue = "file";
-          (fileItem as any).filePath = file;
+            fileItem.contextValue = "file";
+            (fileItem as any).filePath = file;
 
-          return fileItem;
-        })
+            return fileItem;
+          })
       );
     }
 

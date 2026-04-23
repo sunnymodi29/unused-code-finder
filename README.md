@@ -1,12 +1,12 @@
-# 🚀 Scan Unused Code
+# 🚀 Code Cleaner - Unused Code
 
 <p align="center">
   <img src="resources/icon.png" width="120" />
 </p>
 
 <p align="center">
-  <b>Detect and remove unused code instantly in your project</b><br/>
-  Built for speed, accuracy, and developer productivity ⚡
+  <b>Detect, highlight, and remove unused code instantly</b><br/>
+  Clean your codebase with speed, accuracy, and developer productivity ⚡
 </p>
 
 <p align="center">
@@ -25,30 +25,30 @@
 
 ## ✨ Features
 
-* 🔍 **Detect unused variables, functions, and imports**
+* 🔍 **Detect unused variables, functions, imports & dead code**
 * 🧹 **Remove unused code with one click**
 * 📂 **Sidebar view of all unused items**
 * ⚡ **Fast scanning using AST parsing**
 * 🔄 **Real-time refresh of unused code**
-* 🧠 Works with:
+* 🧠 Supports:
 
   * JavaScript
   * TypeScript
   * React (JSX/TSX)
 
-<!-- ---
+---
 
 ## 🖼️ Preview
 
-> Add screenshots/GIFs here to boost installs (very important)
+> ⚠️ Add screenshots or GIFs here — this increases installs massively
 
+<!--
 ### Sidebar View
-
 ![Sidebar Preview](resources/sidebar-preview.png)
 
 ### Code Cleanup
-
-![Cleanup Preview](resources/cleanup-preview.png) -->
+![Cleanup Preview](resources/cleanup-preview.png)
+-->
 
 ---
 
@@ -66,13 +66,13 @@
 
 ## 🧩 How It Works
 
-Unused Code Finder uses **AST (Abstract Syntax Tree)** parsing to:
+**Code Cleaner** uses **AST (Abstract Syntax Tree)** parsing to:
 
 1. Analyze your code structure
-2. Identify unused declarations
-3. Provide actionable cleanup options
+2. Detect unused variables, imports, and functions
+3. Provide safe cleanup actions
 
-👉 No regex hacks. Clean and accurate detection.
+👉 No regex hacks — accurate and reliable detection.
 
 ---
 
@@ -80,10 +80,10 @@ Unused Code Finder uses **AST (Abstract Syntax Tree)** parsing to:
 
 1. Open **VS Code**
 2. Go to **Extensions**
-3. Search: `Scan Unused Code`
+3. Search: `Code Cleaner`
 4. Click **Install**
 
-Or install directly from marketplace:
+Or install directly:
 
 👉 https://marketplace.visualstudio.com/items?itemName=sunnymodi.scan-unused-code
 
@@ -112,17 +112,6 @@ Or install directly from marketplace:
 
 ---
 
-## 📝 Release Notes
-
-### 1.0.0
-
-* Initial release 🎉
-* Unused code detection
-* Sidebar integration
-* Cleanup commands
-
----
-
 ## 🤝 Contributing
 
 Contributions are welcome!
@@ -147,9 +136,9 @@ Contributions are welcome!
 
 If you find this useful:
 
-👉 Star the repo
-👉 Share with other developers
-👉 Leave a review on Marketplace
+👉 Star the repo  
+👉 Share with developers  
+👉 Leave a review on Marketplace  
 
 ---
 

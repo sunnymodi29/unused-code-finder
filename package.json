@@ -1,33 +1,43 @@
 {
   "name": "scan-unused-code",
-  "displayName": "Scan Unused Code",
-  "description": "Detect and remove unused code in JavaScript and TypeScript projects directly from VS Code.",
-  "version": "1.0.3",
+  "displayName": "Code Cleaner - Unused Code",
+  "description": "Detect, highlight, and remove unused code (dead code) in JavaScript and TypeScript projects. Clean your codebase instantly inside VS Code.",
+  "version": "1.0.4",
   "publisher": "sunnymodi",
   "license": "MIT",
   "icon": "resources/icon.png",
+
   "engines": {
     "vscode": "^1.116.0"
   },
+
   "categories": [
     "Linters",
     "Other"
   ],
+
   "keywords": [
+    "unused",
     "unused code",
-    "code cleanup",
-    "javascript",
-    "typescript",
+    "dead code",
+    "code cleaner",
+    "clean code",
     "remove unused",
-    "vscode extension",
-    "code quality"
+    "code cleanup",
+    "typescript unused",
+    "javascript unused",
+    "code scan",
+    "detect unused",
+    "remove dead code"
   ],
+
   "activationEvents": [
     "onLanguage:javascript",
     "onLanguage:typescript",
     "onLanguage:javascriptreact",
     "onLanguage:typescriptreact"
   ],
+
   "main": "./out/extension.js",
 
   "homepage": "https://github.com/sunnymodi29/unused-code-finder",
