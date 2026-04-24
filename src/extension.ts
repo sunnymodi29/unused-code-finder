@@ -1,12 +1,18 @@
 import * as vscode from "vscode";
-import { findUnusedVariables } from "./analyzer";
+import { findUnusedVariables, getAllUsedIdentifiers } from "./analyzer";
 import { UnusedSidebarProvider } from "./sidebarProvider";
 
 // 🔥 GLOBAL CACHE
 export let unusedCache: Record<string, any[]> = {};
 
+// 🔥 GLOBAL USED IDENTIFIERS (for cross-file tracking)
+let globalUsedIdentifiers = new Set<string>();
+
 // 🔥 BULK OPERATION FLAG
 let isBulkOperation = false;
+
+// 🔥 SIDEBAR REFRESH FLAG (batch updates)
+let sidebarNeedsRefresh = false;
 
 export function activate(context: vscode.ExtensionContext) {
   console.log("✅ Extension Activated");
@@ -26,20 +32,78 @@ export function activate(context: vscode.ExtensionContext) {
 
   // 🔥 DEBOUNCE
   let timeout: NodeJS.Timeout | undefined;
+  let sidebarRefreshTimeout: NodeJS.Timeout | undefined;
+  let globalRebuildTimeout: NodeJS.Timeout | undefined;
+
+  const rebuildGlobalUsedIdentifiers = async () => {
+    globalUsedIdentifiers.clear();
+    const files = await vscode.workspace.findFiles(
+      "**/*.{js,ts,jsx,tsx}",
+      "**/node_modules/**"
+    );
+    
+    for (const file of files) {
+      try {
+        const used = getAllUsedIdentifiers(file.fsPath);
+        used.forEach(name => globalUsedIdentifiers.add(name));
+      } catch {}
+    }
+  };
+
+  // 🔥 DEBOUNCED SIDEBAR REFRESH
+  const scheduleSidebarRefresh = () => {
+    if (sidebarRefreshTimeout) {
+      clearTimeout(sidebarRefreshTimeout);
+    }
+    sidebarRefreshTimeout = setTimeout(() => {
+      sidebarProvider.refresh();
+    }, 300);
+  };
+
+  // 🔥 DEBOUNCED GLOBAL REBUILD (only on save, not on keystroke)
+  const scheduleGlobalRebuild = async () => {
+    if (globalRebuildTimeout) {
+      clearTimeout(globalRebuildTimeout);
+    }
+    globalRebuildTimeout = setTimeout(async () => {
+      await rebuildGlobalUsedIdentifiers();
+      scheduleSidebarRefresh();
+    }, 500);
+  };
 
   const triggerUpdate = (doc: vscode.TextDocument) => {
-    if (isBulkOperation) return;
+    if (isBulkOperation) {
+      return;
+    }
 
-    if (timeout) clearTimeout(timeout);
+    if (timeout) {
+      clearTimeout(timeout);
+    }
 
     timeout = setTimeout(() => {
-      unusedCache[doc.fileName] = findUnusedVariables(doc.fileName);
+      const unused = findUnusedVariables(doc.fileName);
+      
+      // 🔥 Filter out items used in any other file
+      unusedCache[doc.fileName] = unused.filter(
+        (item) => !globalUsedIdentifiers.has(item.name)
+      );
 
       updateDiagnostics(doc, diagnostics, decoration);
-
-      sidebarProvider.refresh();
+      scheduleSidebarRefresh();
     }, 200);
   };
+
+  // 🔍 SEARCH COMMAND
+  context.subscriptions.push(
+    vscode.commands.registerCommand("unused.search", async () => {
+      const query = await vscode.window.showInputBox({
+        prompt: "Search unused code",
+        placeHolder: "variable, function, file...",
+      });
+      sidebarProvider.setSearch(query || "");
+    })
+  );
+
 
   // 🔥 INITIAL SCAN
   const scanWorkspace = async () => {
@@ -48,25 +112,167 @@ export function activate(context: vscode.ExtensionContext) {
       "**/node_modules/**"
     );
 
-    for (const file of files) {
-      try {
-        unusedCache[file.fsPath] = findUnusedVariables(file.fsPath);
-      } catch {}
-    }
+    let cancelled = false;
 
-    sidebarProvider.refresh();
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: "Scanning for unused code...",
+        cancellable: true,
+      },
+      async (progress, token) => {
+        sidebarProvider.setLoading(true);
+
+        let hasCancelled = false;
+
+        token.onCancellationRequested(() => {
+          if (hasCancelled) return;
+
+          hasCancelled = true;
+          cancelled = true;
+
+          sidebarProvider.setLoading(false); // 🔥 stop spinner instantly
+          sidebarProvider.setCancelled(true); // 🔥 flag for workers
+
+          vscode.window.setStatusBarMessage("Scan cancelled", 2000);
+        });
+
+        const total = files.length;
+        let processed = 0;
+
+        // 🔥 TEMP CACHE (IMPORTANT)
+        const tempCache: Record<string, any[]> = {};
+        const tempGlobalUsed = new Set<string>();
+
+        const CONCURRENCY = 8;
+
+        const runInBatches = async (
+          items: any[],
+          worker: (item: any) => Promise<void>
+        ) => {
+          let index = 0;
+
+          const workers = Array(CONCURRENCY)
+            .fill(0)
+            .map(async () => {
+              while (true) {
+                if (cancelled) return; // 🔥 HARD STOP
+
+                const i = index++;
+                if (i >= items.length) return;
+
+                const item = items[i];
+
+                if (cancelled) return; // 🔥 DOUBLE CHECK
+
+                try {
+                  await worker(item);
+                } catch {}
+
+                if (cancelled) return; // 🔥 STOP AFTER WORK
+
+                processed++;
+
+                progress.report({
+                  increment: (1 / total) * 100,
+                  message: `${processed}/${total} files`,
+                });
+
+                // 🔥 yield UI
+                if (processed % 20 === 0) {
+                  await new Promise((r) => setTimeout(r, 0));
+                }
+              }
+            });
+
+          await Promise.all(workers);
+        };
+
+        // 🔥 PASS 1
+        await runInBatches(files, async (file) => {
+          if (cancelled) return;
+
+          const used = getAllUsedIdentifiers(file.fsPath);
+          used.forEach((n) => tempGlobalUsed.add(n));
+        });
+
+        if (cancelled) {
+          sidebarProvider.setLoading(false);
+          return;
+        }
+
+        processed = 0;
+
+        // 🔥 PASS 2
+        await runInBatches(files, async (file) => {
+          if (cancelled) return;
+
+          const unused = findUnusedVariables(file.fsPath);
+
+          tempCache[file.fsPath] = unused.filter(
+            (item) => !tempGlobalUsed.has(item.name)
+          );
+        });
+
+        if (cancelled) {
+          sidebarProvider.setLoading(false);
+          return; // ❌ STOP AGAIN
+        }
+
+        // ✅ ONLY UPDATE IF NOT CANCELLED
+        globalUsedIdentifiers = tempGlobalUsed;
+        unusedCache = tempCache;
+
+        sidebarProvider.setLoading(false);
+        sidebarProvider.setCancelled(false);
+        sidebarProvider.refresh();
+      }
+    );
   };
 
   scanWorkspace();
 
-  vscode.workspace.onDidSaveTextDocument(triggerUpdate);
+  vscode.workspace.onDidSaveTextDocument((doc) => {
+    triggerUpdate(doc);
+    // 🔥 Rebuild global identifiers on save
+    scheduleGlobalRebuild();
+  });
 
   vscode.workspace.onDidChangeTextDocument((e) => {
-    if (isBulkOperation) return;
+    if (isBulkOperation) {
+      return;
+    }
     if (e.contentChanges.length > 0) {
       triggerUpdate(e.document);
     }
   });
+
+  // 🔥 APPLY DECORATIONS WHEN EDITOR BECOMES ACTIVE
+  vscode.window.onDidChangeActiveTextEditor((editor) => {
+    if (editor && editor.document.fileName) {
+      const unused = unusedCache[editor.document.fileName] || [];
+      updateDiagnosticsFromCache(
+        editor.document,
+        diagnostics,
+        decoration,
+        unused
+      );
+    }
+  });
+
+  // 🔥 APPLY DECORATIONS TO ACTIVE EDITOR ON ACTIVATION
+  setTimeout(() => {
+    const activeEditor = vscode.window.activeTextEditor;
+    if (activeEditor && activeEditor.document.fileName) {
+      const unused = unusedCache[activeEditor.document.fileName] || [];
+      updateDiagnosticsFromCache(
+        activeEditor.document,
+        diagnostics,
+        decoration,
+        unused
+      );
+    }
+  }, 500);
 
   // 🔥 GO TO LINE
   context.subscriptions.push(
@@ -80,7 +286,9 @@ export function activate(context: vscode.ExtensionContext) {
           editor = await vscode.window.showTextDocument(doc);
         }
 
-        if (!editor) return;
+        if (!editor) {
+          return;
+        }
 
         const pos = new vscode.Position(line, 0);
         editor.selection = new vscode.Selection(pos, pos);
@@ -96,7 +304,9 @@ export function activate(context: vscode.ExtensionContext) {
     item: any,
     fileItems: any[]
   ) => {
-    if (item.start === undefined || item.end === undefined) return;
+    if (item.start === undefined || item.end === undefined) {
+      return;
+    }
 
     // 🔥 HANDLE VARIABLE DECLARATION (FINAL FIX)
     if (item.type === "variable") {
@@ -114,7 +324,9 @@ export function activate(context: vscode.ExtensionContext) {
 
       // 🔥 Extract keyword + body
       const match = fullText.match(/(const|let|var)\s+([\s\S]*?);?$/);
-      if (!match) return;
+      if (!match) {
+        return;
+      }
 
       const keyword = match[1];
       const body = match[2];
@@ -128,7 +340,9 @@ export function activate(context: vscode.ExtensionContext) {
       // 🔥 Remove ALL unused variables from this declaration
       const updatedParts = parts.filter((part) => {
         const nameMatch = part.match(/^([a-zA-Z_$][\w$]*)/);
-        if (!nameMatch) return true;
+        if (!nameMatch) {
+          return true;
+        }
 
         const varName = nameMatch[1];
 
@@ -171,7 +385,9 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       "unused.deleteFromSidebar",
       async (item) => {
-        if (!item?.filePath) return;
+        if (!item?.filePath) {
+          return;
+        }
 
         const doc = await vscode.workspace.openTextDocument(item.filePath);
 
@@ -182,10 +398,13 @@ export function activate(context: vscode.ExtensionContext) {
 
         await vscode.workspace.applyEdit(edit);
 
-        // refresh cache
-        unusedCache[item.filePath] = findUnusedVariables(item.filePath);
+        // 🔥 FAST CACHE UPDATE: only remove the deleted item, don't full rescan
+        const remaining = unusedCache[item.filePath] || [];
+        unusedCache[item.filePath] = remaining.filter(
+          (i) => i.name !== item.name || i.loc.start.line !== item.loc.start.line
+        );
 
-        sidebarProvider.refresh();
+        scheduleSidebarRefresh();
       }
     )
   );
@@ -220,23 +439,28 @@ export function activate(context: vscode.ExtensionContext) {
         // wait for VS Code update
         await new Promise((r) => setTimeout(r, 100));
 
-        // 🔥 rebuild cache
+        // 🔥 rebuild cache with cross-file tracking (more efficiently)
         unusedCache = {};
+        await rebuildGlobalUsedIdentifiers();
 
         const files = await vscode.workspace.findFiles(
           "**/*.{js,ts,jsx,tsx}",
           "**/node_modules/**"
         );
 
+        // 🔥 Only scan files that had unused code before (faster recovery)
         for (const file of files) {
           try {
-            unusedCache[file.fsPath] = findUnusedVariables(file.fsPath);
+            const unused = findUnusedVariables(file.fsPath);
+            unusedCache[file.fsPath] = unused.filter(
+              (item) => !globalUsedIdentifiers.has(item.name)
+            );
           } catch {
             unusedCache[file.fsPath] = [];
           }
         }
 
-        sidebarProvider.refresh();
+        scheduleSidebarRefresh();
 
         const activeEditor = vscode.window.activeTextEditor;
         if (activeEditor) {
@@ -268,7 +492,9 @@ function updateDiagnosticsFromCache(
   unused: any[]
 ) {
   const editor = vscode.window.activeTextEditor;
-  if (!editor || editor.document !== document) return;
+  if (!editor || editor.document !== document) {
+    return;
+  }
 
   const diags: vscode.Diagnostic[] = [];
   const decos: vscode.DecorationOptions[] = [];
@@ -298,7 +524,9 @@ function updateDiagnostics(
   decoration: vscode.TextEditorDecorationType
 ) {
   const editor = vscode.window.activeTextEditor;
-  if (!editor || editor.document !== document) return;
+  if (!editor || editor.document !== document) {
+    return;
+  }
 
   const unused = unusedCache[document.fileName] || [];
 

@@ -1,23 +1,60 @@
 {
-  "name": "unused-code-finder",
-  "displayName": "unused-code-finder",
-  "description": "",
-  "version": "0.0.1",
+  "name": "scan-unused-code",
+  "displayName": "Code Cleaner - Unused Code",
+  "description": "Detect, highlight, and remove unused code (dead code) in JavaScript and TypeScript projects. Clean your codebase instantly inside VS Code.",
+  "version": "1.0.4",
+  "publisher": "sunnymodi",
+  "license": "MIT",
+  "icon": "resources/icon.png",
+
   "engines": {
-    "vscode": "^1.114.0"
+    "vscode": "^1.116.0"
   },
+
   "categories": [
+    "Linters",
     "Other"
   ],
+
+  "keywords": [
+    "unused",
+    "unused code",
+    "dead code",
+    "code cleaner",
+    "clean code",
+    "remove unused",
+    "code cleanup",
+    "typescript unused",
+    "javascript unused",
+    "code scan",
+    "detect unused",
+    "remove dead code"
+  ],
+
   "activationEvents": [
     "onLanguage:javascript",
     "onLanguage:typescript",
     "onLanguage:javascriptreact",
     "onLanguage:typescriptreact"
   ],
+
   "main": "./out/extension.js",
+
+  "homepage": "https://github.com/sunnymodi29/unused-code-finder",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sunnymodi29/unused-code-finder.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sunnymodi29/unused-code-finder/issues"
+  },
+
   "contributes": {
     "commands": [
+      {
+        "command": "unused.search",
+        "title": "Search"
+      },
       {
         "command": "unused.removeCurrent",
         "title": "Remove Unused Line"
@@ -36,20 +73,22 @@
       },
       {
         "command": "unused.removeAllFromSidebar",
+        "title": "Remove All",
         "when": "view == unusedSidebar",
-        "group": "navigation",
-        "title": "Remove All"
+        "group": "navigation"
       }
     ],
+
     "viewsContainers": {
       "activitybar": [
         {
           "id": "unused-sidebar",
           "title": "Unused Code",
-          "icon": "resources/icon.svg"
+          "icon": "resources/sidebar-icon.svg"
         }
       ]
     },
+
     "views": {
       "unused-sidebar": [
         {
@@ -58,8 +97,14 @@
         }
       ]
     },
+
     "menus": {
       "view/title": [
+        {
+          "command": "unused.search",
+          "when": "view == unusedSidebar",
+          "group": "navigation@1"
+        },
         {
           "command": "unused.removeAllFromSidebar",
           "when": "view == unusedSidebar",
@@ -75,6 +120,7 @@
       ]
     }
   },
+
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
@@ -83,6 +129,7 @@
     "lint": "eslint src",
     "test": "vscode-test"
   },
+
   "devDependencies": {
     "@types/babel__traverse": "^7.28.0",
     "@types/mocha": "^10.0.10",
@@ -94,6 +141,7 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1"
   },
+
   "dependencies": {
     "@babel/parser": "^7.29.2",
     "@babel/traverse": "^7.29.0"
