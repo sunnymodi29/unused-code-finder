@@ -1,4 +1,4 @@
-# 🚀 Code Cleaner - Unused Code
+# 🚀 Code Cleaner - Scan Unused Code
 
 <p align="center">
   <img src="resources/icon.png" width="120" />
@@ -38,9 +38,9 @@
 
 ---
 
-## 🖼️ Preview
+<!-- ## 🖼️ Preview
 
-> ⚠️ Add screenshots or GIFs here — this increases installs massively
+> ⚠️ Add screenshots or GIFs here — this increases installs massively -->
 
 <!--
 ### Sidebar View
@@ -49,8 +49,6 @@
 ### Code Cleanup
 ![Cleanup Preview](resources/cleanup-preview.png)
 -->
-
----
 
 ## ⚡ Commands
 
@@ -80,7 +78,7 @@
 
 1. Open **VS Code**
 2. Go to **Extensions**
-3. Search: `Code Cleaner`
+3. Search: `Code Cleaner - Scan Unused Code`
 4. Click **Install**
 
 Or install directly:
