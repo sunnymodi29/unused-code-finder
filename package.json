@@ -52,6 +52,10 @@
   "contributes": {
     "commands": [
       {
+        "command": "unused.search",
+        "title": "Search"
+      },
+      {
         "command": "unused.removeCurrent",
         "title": "Remove Unused Line"
       },
@@ -96,6 +100,11 @@
 
     "menus": {
       "view/title": [
+        {
+          "command": "unused.search",
+          "when": "view == unusedSidebar",
+          "group": "navigation@1"
+        },
         {
           "command": "unused.removeAllFromSidebar",
           "when": "view == unusedSidebar",

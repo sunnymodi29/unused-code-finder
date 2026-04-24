@@ -93,6 +93,18 @@ export function activate(context: vscode.ExtensionContext) {
     }, 200);
   };
 
+  // 🔍 SEARCH COMMAND
+  context.subscriptions.push(
+    vscode.commands.registerCommand("unused.search", async () => {
+      const query = await vscode.window.showInputBox({
+        prompt: "Search unused code",
+        placeHolder: "variable, function, file...",
+      });
+      sidebarProvider.setSearch(query || "");
+    })
+  );
+
+
   // 🔥 INITIAL SCAN
   const scanWorkspace = async () => {
     const files = await vscode.workspace.findFiles(
@@ -100,26 +112,122 @@ export function activate(context: vscode.ExtensionContext) {
       "**/node_modules/**"
     );
 
-    // 🔥 First pass: collect all used identifiers from all files
-    globalUsedIdentifiers.clear();
-    for (const file of files) {
-      try {
-        const used = getAllUsedIdentifiers(file.fsPath);
-        used.forEach(name => globalUsedIdentifiers.add(name));
-      } catch {}
-    }
+    let cancelled = false;
 
-    // 🔥 Second pass: find unused, filtering out items used globally
-    for (const file of files) {
-      try {
-        const unused = findUnusedVariables(file.fsPath);
-        unusedCache[file.fsPath] = unused.filter(
-          (item) => !globalUsedIdentifiers.has(item.name)
-        );
-      } catch {}
-    }
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: "Scanning for unused code...",
+        cancellable: true,
+      },
+      async (progress, token) => {
+        sidebarProvider.setLoading(true);
 
-    sidebarProvider.refresh();
+        let hasCancelled = false;
+
+        token.onCancellationRequested(() => {
+          if (hasCancelled) return;
+
+          hasCancelled = true;
+          cancelled = true;
+
+          sidebarProvider.setLoading(false); // 🔥 stop spinner instantly
+          sidebarProvider.setCancelled(true); // 🔥 flag for workers
+
+          vscode.window.setStatusBarMessage("Scan cancelled", 2000);
+        });
+
+        const total = files.length;
+        let processed = 0;
+
+        // 🔥 TEMP CACHE (IMPORTANT)
+        const tempCache: Record<string, any[]> = {};
+        const tempGlobalUsed = new Set<string>();
+
+        const CONCURRENCY = 8;
+
+        const runInBatches = async (
+          items: any[],
+          worker: (item: any) => Promise<void>
+        ) => {
+          let index = 0;
+
+          const workers = Array(CONCURRENCY)
+            .fill(0)
+            .map(async () => {
+              while (true) {
+                if (cancelled) return; // 🔥 HARD STOP
+
+                const i = index++;
+                if (i >= items.length) return;
+
+                const item = items[i];
+
+                if (cancelled) return; // 🔥 DOUBLE CHECK
+
+                try {
+                  await worker(item);
+                } catch {}
+
+                if (cancelled) return; // 🔥 STOP AFTER WORK
+
+                processed++;
+
+                progress.report({
+                  increment: (1 / total) * 100,
+                  message: `${processed}/${total} files`,
+                });
+
+                // 🔥 yield UI
+                if (processed % 20 === 0) {
+                  await new Promise((r) => setTimeout(r, 0));
+                }
+              }
+            });
+
+          await Promise.all(workers);
+        };
+
+        // 🔥 PASS 1
+        await runInBatches(files, async (file) => {
+          if (cancelled) return;
+
+          const used = getAllUsedIdentifiers(file.fsPath);
+          used.forEach((n) => tempGlobalUsed.add(n));
+        });
+
+        if (cancelled) {
+          sidebarProvider.setLoading(false);
+          return;
+        }
+
+        processed = 0;
+
+        // 🔥 PASS 2
+        await runInBatches(files, async (file) => {
+          if (cancelled) return;
+
+          const unused = findUnusedVariables(file.fsPath);
+
+          tempCache[file.fsPath] = unused.filter(
+            (item) => !tempGlobalUsed.has(item.name)
+          );
+        });
+
+        if (cancelled) {
+          sidebarProvider.setLoading(false);
+          return; // ❌ STOP AGAIN
+        }
+
+        // ✅ ONLY UPDATE IF NOT CANCELLED
+        globalUsedIdentifiers = tempGlobalUsed;
+        unusedCache = tempCache;
+
+        sidebarProvider.setLoading(false);
+        sidebarProvider.setCancelled(false);
+        sidebarProvider.refresh();
+      }
+    );
   };
 
   scanWorkspace();

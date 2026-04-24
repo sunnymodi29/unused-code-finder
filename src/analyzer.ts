@@ -34,6 +34,13 @@ export function getAllUsedIdentifiers(filePath: string): Set<string> {
     const used = new Set<string>();
 
     traverse(ast, {
+      // 🔥 IMPORTS ARE USES! (critical for cross-file tracking)
+      ImportDeclaration(path) {
+        path.node.specifiers.forEach((spec: any) => {
+          used.add(spec.local.name);
+        });
+      },
+
       Identifier(path) {
         const parent = path.parent;
 
