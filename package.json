@@ -1,8 +1,8 @@
 {
   "name": "scan-unused-code",
-  "displayName": "Code Cleaner - Unused Code",
-  "description": "Detect, highlight, and remove unused code (dead code) in JavaScript and TypeScript projects. Clean your codebase instantly inside VS Code.",
-  "version": "1.0.4",
+  "displayName": "Code Cleaner - Scan Unused Code",
+  "description": "Detect, highlight, and remove unused code (dead code) in JavaScript and TypeScript projects.",
+  "version": "1.0.5",
   "publisher": "sunnymodi",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -11,10 +11,7 @@
     "vscode": "^1.116.0"
   },
 
-  "categories": [
-    "Linters",
-    "Other"
-  ],
+  "categories": ["Linters"],
 
   "keywords": [
     "unused",
@@ -52,30 +49,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "unused.search",
-        "title": "Search"
-      },
-      {
-        "command": "unused.removeCurrent",
-        "title": "Remove Unused Line"
-      },
-      {
-        "command": "unused.removeAll",
-        "title": "Remove All Unused Code"
-      },
-      {
-        "command": "unused.refresh",
-        "title": "Refresh Unused List"
-      },
-      {
         "command": "unused.deleteFromSidebar",
-        "title": "Delete Unused"
-      },
-      {
-        "command": "unused.removeAllFromSidebar",
-        "title": "Remove All",
-        "when": "view == unusedSidebar",
-        "group": "navigation"
+        "title": "Delete"
       }
     ],
 
@@ -83,7 +58,7 @@
       "activitybar": [
         {
           "id": "unused-sidebar",
-          "title": "Unused Code",
+          "title": "Code Cleaner",
           "icon": "resources/sidebar-icon.svg"
         }
       ]
@@ -92,25 +67,15 @@
     "views": {
       "unused-sidebar": [
         {
+          "type": "webview",
           "id": "unusedSidebar",
-          "name": "Unused Items"
+          "name": "Scan Unused Code",
+          "icon": "resources/sidebar-icon.svg"
         }
       ]
     },
 
     "menus": {
-      "view/title": [
-        {
-          "command": "unused.search",
-          "when": "view == unusedSidebar",
-          "group": "navigation@1"
-        },
-        {
-          "command": "unused.removeAllFromSidebar",
-          "when": "view == unusedSidebar",
-          "group": "navigation"
-        }
-      ],
       "view/item/context": [
         {
           "command": "unused.deleteFromSidebar",
@@ -125,7 +90,6 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "vscode-test"
   },

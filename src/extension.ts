@@ -1,18 +1,18 @@
 import * as vscode from "vscode";
 import { findUnusedVariables, getAllUsedIdentifiers } from "./analyzer";
-import { UnusedSidebarProvider } from "./sidebarProvider";
+import { UnusedWebviewProvider } from "./webViewProvider";
 
 // 🔥 GLOBAL CACHE
 export let unusedCache: Record<string, any[]> = {};
 
-// 🔥 GLOBAL USED IDENTIFIERS (for cross-file tracking)
+// 🔥 GLOBAL USED IDENTIFIERS
 let globalUsedIdentifiers = new Set<string>();
 
-// 🔥 BULK OPERATION FLAG
+// 🔥 FLAGS
 let isBulkOperation = false;
 
-// 🔥 SIDEBAR REFRESH FLAG (batch updates)
-let sidebarNeedsRefresh = false;
+// 🔥 SIDEBAR SCAN STATE
+let scanState: "idle" | "loading" | "cancelled" | "done" = "idle";
 
 export function activate(context: vscode.ExtensionContext) {
   console.log("✅ Extension Activated");
@@ -25,88 +25,73 @@ export function activate(context: vscode.ExtensionContext) {
     isWholeLine: true,
   });
 
-  const sidebarProvider = new UnusedSidebarProvider();
+  // ✅ WEBVIEW
+  const webviewProvider = new UnusedWebviewProvider(context);
+
   context.subscriptions.push(
-    vscode.window.registerTreeDataProvider("unusedSidebar", sidebarProvider)
+    vscode.window.registerWebviewViewProvider(
+      "unusedSidebar",
+      webviewProvider,
+      {
+        webviewOptions: {
+          retainContextWhenHidden: true,
+        },
+      }
+    )
   );
 
-  // 🔥 DEBOUNCE
-  let timeout: NodeJS.Timeout | undefined;
-  let sidebarRefreshTimeout: NodeJS.Timeout | undefined;
-  let globalRebuildTimeout: NodeJS.Timeout | undefined;
-
+  // 🔥 REBUILD GLOBAL USED
   const rebuildGlobalUsedIdentifiers = async () => {
     globalUsedIdentifiers.clear();
+
     const files = await vscode.workspace.findFiles(
       "**/*.{js,ts,jsx,tsx}",
       "**/node_modules/**"
     );
-    
+
     for (const file of files) {
       try {
         const used = getAllUsedIdentifiers(file.fsPath);
-        used.forEach(name => globalUsedIdentifiers.add(name));
+        used.forEach((n) => globalUsedIdentifiers.add(n));
       } catch {}
     }
   };
 
-  // 🔥 DEBOUNCED SIDEBAR REFRESH
-  const scheduleSidebarRefresh = () => {
-    if (sidebarRefreshTimeout) {
-      clearTimeout(sidebarRefreshTimeout);
-    }
-    sidebarRefreshTimeout = setTimeout(() => {
-      sidebarProvider.refresh();
-    }, 300);
-  };
-
-  // 🔥 DEBOUNCED GLOBAL REBUILD (only on save, not on keystroke)
-  const scheduleGlobalRebuild = async () => {
-    if (globalRebuildTimeout) {
-      clearTimeout(globalRebuildTimeout);
-    }
-    globalRebuildTimeout = setTimeout(async () => {
-      await rebuildGlobalUsedIdentifiers();
-      scheduleSidebarRefresh();
-    }, 500);
-  };
-
+  // 🔥 UPDATE SINGLE FILE
   const triggerUpdate = (doc: vscode.TextDocument) => {
-    if (isBulkOperation) {
-      return;
-    }
+    if (isBulkOperation) return;
 
-    if (timeout) {
-      clearTimeout(timeout);
-    }
+    const unused = findUnusedVariables(doc.fileName);
 
-    timeout = setTimeout(() => {
-      const unused = findUnusedVariables(doc.fileName);
-      
-      // 🔥 Filter out items used in any other file
-      unusedCache[doc.fileName] = unused.filter(
-        (item) => !globalUsedIdentifiers.has(item.name)
-      );
+    unusedCache[doc.fileName] = unused.filter(
+      (item) => !globalUsedIdentifiers.has(item.name)
+    );
 
-      updateDiagnostics(doc, diagnostics, decoration);
-      scheduleSidebarRefresh();
-    }, 200);
+    updateDiagnostics(doc, diagnostics, decoration);
+    webviewProvider.update();
   };
 
-  // 🔍 SEARCH COMMAND
-  context.subscriptions.push(
-    vscode.commands.registerCommand("unused.search", async () => {
-      const query = await vscode.window.showInputBox({
-        prompt: "Search unused code",
-        placeHolder: "variable, function, file...",
-      });
-      sidebarProvider.setSearch(query || "");
-    })
-  );
+  let isScanning = false;
 
+    // 🔥 SAFE WRAPPER (prevents double scan)
+    const scanWorkspaceSafe = async (webviewProvider?: any) => {
+      if (isScanning) {
+        vscode.window.setStatusBarMessage("Scan already running...", 1500);
+        return;
+      }
 
-  // 🔥 INITIAL SCAN
-  const scanWorkspace = async () => {
+      isScanning = true;
+
+      try {
+        await scanWorkspace(webviewProvider);
+      } finally {
+        isScanning = false;
+      }
+    };
+
+  // 🔥 FAST SCAN (PARALLEL + CANCEL SAFE)
+  const scanWorkspace = async (webviewProvider?: any) => {
+    webviewProvider?.updateState?.("loading", 0);
     const files = await vscode.workspace.findFiles(
       "**/*.{js,ts,jsx,tsx}",
       "**/node_modules/**"
@@ -121,133 +106,121 @@ export function activate(context: vscode.ExtensionContext) {
         cancellable: true,
       },
       async (progress, token) => {
-        sidebarProvider.setLoading(true);
-
-        let hasCancelled = false;
-
         token.onCancellationRequested(() => {
-          if (hasCancelled) return;
-
-          hasCancelled = true;
           cancelled = true;
-
-          sidebarProvider.setLoading(false); // 🔥 stop spinner instantly
-          sidebarProvider.setCancelled(true); // 🔥 flag for workers
-
-          vscode.window.setStatusBarMessage("Scan cancelled", 2000);
         });
 
         const total = files.length;
+
         let processed = 0;
 
-        // 🔥 TEMP CACHE (IMPORTANT)
-        const tempCache: Record<string, any[]> = {};
-        const tempGlobalUsed = new Set<string>();
+        const globalUsedIdentifiers = new Set<string>();
 
-        const CONCURRENCY = 8;
+        // 🔥 PASS 1 — collect used identifiers
+        for (const file of files) {
+          if (cancelled) break;
 
-        const runInBatches = async (
-          items: any[],
-          worker: (item: any) => Promise<void>
-        ) => {
-          let index = 0;
+          try {
+            const used = getAllUsedIdentifiers(file.fsPath);
+            used.forEach((n) => globalUsedIdentifiers.add(n));
+          } catch {
+            // 🔥 never crash
+          }
 
-          const workers = Array(CONCURRENCY)
-            .fill(0)
-            .map(async () => {
-              while (true) {
-                if (cancelled) return; // 🔥 HARD STOP
+          processed++;
 
-                const i = index++;
-                if (i >= items.length) return;
+          // 🔥 throttle UI updates
+          if (processed % 10 === 0 || processed === total) {
+            const percent = Math.floor((processed / total) * 50);
 
-                const item = items[i];
-
-                if (cancelled) return; // 🔥 DOUBLE CHECK
-
-                try {
-                  await worker(item);
-                } catch {}
-
-                if (cancelled) return; // 🔥 STOP AFTER WORK
-
-                processed++;
-
-                progress.report({
-                  increment: (1 / total) * 100,
-                  message: `${processed}/${total} files`,
-                });
-
-                // 🔥 yield UI
-                if (processed % 20 === 0) {
-                  await new Promise((r) => setTimeout(r, 0));
-                }
-              }
+            progress.report({
+              increment: (1 / total) * 50,
+              message: `${processed}/${total} files (analyzing usage)`,
             });
 
-          await Promise.all(workers);
-        };
-
-        // 🔥 PASS 1
-        await runInBatches(files, async (file) => {
-          if (cancelled) return;
-
-          const used = getAllUsedIdentifiers(file.fsPath);
-          used.forEach((n) => tempGlobalUsed.add(n));
-        });
+            webviewProvider?.updateState?.(
+              "loading",
+              percent,
+              file.fsPath.split("\\").pop()
+            );
+          }
+        }
 
         if (cancelled) {
-          sidebarProvider.setLoading(false);
+          webviewProvider?.updateState?.("cancelled");
+          vscode.window.setStatusBarMessage("Scan cancelled", 2000);
           return;
         }
 
+        // 🔥 PASS 2 — find unused
         processed = 0;
 
-        // 🔥 PASS 2
-        await runInBatches(files, async (file) => {
-          if (cancelled) return;
+        for (const file of files) {
+          if (cancelled) break;
 
-          const unused = findUnusedVariables(file.fsPath);
+          try {
+            const unused = findUnusedVariables(file.fsPath);
 
-          tempCache[file.fsPath] = unused.filter(
-            (item) => !tempGlobalUsed.has(item.name)
-          );
-        });
+            unusedCache[file.fsPath] = unused.filter(
+              (item) => !globalUsedIdentifiers.has(item.name)
+            );
+          } catch {
+            // 🔥 skip broken file
+            unusedCache[file.fsPath] = [];
+          }
 
-        if (cancelled) {
-          sidebarProvider.setLoading(false);
-          return; // ❌ STOP AGAIN
+          processed++;
+
+          if (processed % 10 === 0 || processed === total) {
+            const percent =
+              50 + Math.floor((processed / total) * 50);
+
+            progress.report({
+              increment: (1 / total) * 50,
+              message: `${processed}/${total} files (finding unused)`,
+            });
+
+            webviewProvider?.updateState?.(
+              "loading",
+              percent,
+              file.fsPath.split("\\").pop()
+            );
+          }
         }
 
-        // ✅ ONLY UPDATE IF NOT CANCELLED
-        globalUsedIdentifiers = tempGlobalUsed;
-        unusedCache = tempCache;
+        if (cancelled) {
+          webviewProvider?.updateState?.("cancelled");
+          vscode.window.setStatusBarMessage("Scan cancelled", 2000);
+          return;
+        }
 
-        sidebarProvider.setLoading(false);
-        sidebarProvider.setCancelled(false);
-        sidebarProvider.refresh();
+        // 🔥 DONE
+        webviewProvider?.updateState?.("done", 100);
+
+        vscode.window.setStatusBarMessage("Scan complete", 2000);
+
+        webviewProvider?.update?.();
       }
     );
-  };
+  }
 
-  scanWorkspace();
+  scanWorkspace(webviewProvider);
 
-  vscode.workspace.onDidSaveTextDocument((doc) => {
+  // 🔥 FILE EVENTS
+  vscode.workspace.onDidSaveTextDocument(async (doc) => {
     triggerUpdate(doc);
-    // 🔥 Rebuild global identifiers on save
-    scheduleGlobalRebuild();
+    await rebuildGlobalUsedIdentifiers();
+    webviewProvider.update();
   });
 
   vscode.workspace.onDidChangeTextDocument((e) => {
-    if (isBulkOperation) {
-      return;
-    }
+    if (isBulkOperation) return;
     if (e.contentChanges.length > 0) {
       triggerUpdate(e.document);
     }
   });
 
-  // 🔥 APPLY DECORATIONS WHEN EDITOR BECOMES ACTIVE
+  // 🔥 ACTIVE EDITOR DECORATION
   vscode.window.onDidChangeActiveTextEditor((editor) => {
     if (editor && editor.document.fileName) {
       const unused = unusedCache[editor.document.fileName] || [];
@@ -260,13 +233,13 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
 
-  // 🔥 APPLY DECORATIONS TO ACTIVE EDITOR ON ACTIVATION
+  // 🔥 INITIAL DECORATION
   setTimeout(() => {
-    const activeEditor = vscode.window.activeTextEditor;
-    if (activeEditor && activeEditor.document.fileName) {
-      const unused = unusedCache[activeEditor.document.fileName] || [];
+    const editor = vscode.window.activeTextEditor;
+    if (editor) {
+      const unused = unusedCache[editor.document.fileName] || [];
       updateDiagnosticsFromCache(
-        activeEditor.document,
+        editor.document,
         diagnostics,
         decoration,
         unused
@@ -286,9 +259,7 @@ export function activate(context: vscode.ExtensionContext) {
           editor = await vscode.window.showTextDocument(doc);
         }
 
-        if (!editor) {
-          return;
-        }
+        if (!editor) return;
 
         const pos = new vscode.Position(line, 0);
         editor.selection = new vscode.Selection(pos, pos);
@@ -297,87 +268,19 @@ export function activate(context: vscode.ExtensionContext) {
     )
   );
 
-  // 🔥 AST DELETE FUNCTION (CORE FIX)
+  // 🔥 DELETE (AST SAFE)
   const deleteByAstRange = (
     doc: vscode.TextDocument,
     edit: vscode.WorkspaceEdit,
     item: any,
     fileItems: any[]
   ) => {
-    if (item.start === undefined || item.end === undefined) {
-      return;
-    }
+    if (item.start === undefined || item.end === undefined) return;
 
-    // 🔥 HANDLE VARIABLE DECLARATION (FINAL FIX)
-    if (item.type === "variable") {
-      const related = fileItems.filter(
-        (i) =>
-          i.type === "variable" &&
-          i.declarationStart === item.declarationStart &&
-          i.declarationEnd === item.declarationEnd
-      );
+    const start = doc.positionAt(item.start);
+    const end = doc.positionAt(item.end);
 
-      const startPos = doc.positionAt(item.declarationStart);
-      const endPos = doc.positionAt(item.declarationEnd);
-
-      const fullText = doc.getText(new vscode.Range(startPos, endPos));
-
-      // 🔥 Extract keyword + body
-      const match = fullText.match(/(const|let|var)\s+([\s\S]*?);?$/);
-      if (!match) {
-        return;
-      }
-
-      const keyword = match[1];
-      const body = match[2];
-
-      // 🔥 Split variables safely
-      const parts = body
-        .split(",")
-        .map((p) => p.trim())
-        .filter(Boolean);
-
-      // 🔥 Remove ALL unused variables from this declaration
-      const updatedParts = parts.filter((part) => {
-        const nameMatch = part.match(/^([a-zA-Z_$][\w$]*)/);
-        if (!nameMatch) {
-          return true;
-        }
-
-        const varName = nameMatch[1];
-
-        return !related.some((r) => r.name === varName);
-      });
-
-      // 🔥 CASE 1: All removed → delete whole statement
-      if (updatedParts.length === 0) {
-        edit.delete(doc.uri, new vscode.Range(startPos, endPos));
-        return;
-      }
-
-      // 🔥 CASE 2: Rebuild clean statement
-      const updated = `${keyword} ${updatedParts.join(", ")};`;
-
-      edit.replace(doc.uri, new vscode.Range(startPos, endPos), updated);
-      return;
-    }
-
-    // 🔥 IMPORT (delete full line cleanly)
-    if (item.type === "import") {
-      const startPos = doc.positionAt(item.start);
-      const line = doc.lineAt(startPos.line);
-      edit.delete(doc.uri, line.rangeIncludingLineBreak);
-      return;
-    }
-
-    // 🔥 DEFAULT (functions, etc.)
-    const startPos = doc.positionAt(item.start);
-    const endPos = doc.positionAt(item.end);
-
-    const startLine = doc.lineAt(startPos.line).range.start;
-    const endLine = doc.lineAt(endPos.line).range.end;
-
-    edit.delete(doc.uri, new vscode.Range(startLine, endLine));
+    edit.delete(doc.uri, new vscode.Range(start, end));
   };
 
   // 🔥 DELETE SINGLE
@@ -385,31 +288,31 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       "unused.deleteFromSidebar",
       async (item) => {
-        if (!item?.filePath) {
-          return;
-        }
+        if (!item?.filePath) return;
 
         const doc = await vscode.workspace.openTextDocument(item.filePath);
-
         const edit = new vscode.WorkspaceEdit();
 
-        const fileItems = unusedCache[item.filePath] || [];
-        deleteByAstRange(doc, edit, item, fileItems);
+        deleteByAstRange(
+          doc,
+          edit,
+          item,
+          unusedCache[item.filePath] || []
+        );
 
         await vscode.workspace.applyEdit(edit);
 
-        // 🔥 FAST CACHE UPDATE: only remove the deleted item, don't full rescan
-        const remaining = unusedCache[item.filePath] || [];
-        unusedCache[item.filePath] = remaining.filter(
-          (i) => i.name !== item.name || i.loc.start.line !== item.loc.start.line
-        );
+        unusedCache[item.filePath] =
+          (unusedCache[item.filePath] || []).filter(
+            (i) => i.start !== item.start
+          );
 
-        scheduleSidebarRefresh();
+        webviewProvider.update();
       }
     )
   );
 
-  // 🔥 REMOVE ALL (AST + SORTED)
+  // 🔥 REMOVE ALL
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "unused.removeAllFromSidebar",
@@ -419,58 +322,23 @@ export function activate(context: vscode.ExtensionContext) {
         const edit = new vscode.WorkspaceEdit();
 
         for (const filePath of Object.keys(unusedCache)) {
-          try {
-            const doc = await vscode.workspace.openTextDocument(filePath);
-            const unused = unusedCache[filePath] || [];
+          const doc = await vscode.workspace.openTextDocument(filePath);
 
-            // 🔥 SORT DESCENDING (critical)
-            unused
-              .slice()
-              .sort((a, b) => b.start - a.start)
-              .forEach((item) => {
-                const fileItems = unusedCache[filePath] || [];
-                deleteByAstRange(doc, edit, item, fileItems);
-              });
-          } catch {}
+          const unused = unusedCache[filePath] || [];
+
+          unused
+            .slice()
+            .sort((a, b) => b.start - a.start)
+            .forEach((item) => {
+              deleteByAstRange(doc, edit, item, unused);
+            });
         }
 
         await vscode.workspace.applyEdit(edit);
 
-        // wait for VS Code update
-        await new Promise((r) => setTimeout(r, 100));
-
-        // 🔥 rebuild cache with cross-file tracking (more efficiently)
         unusedCache = {};
         await rebuildGlobalUsedIdentifiers();
-
-        const files = await vscode.workspace.findFiles(
-          "**/*.{js,ts,jsx,tsx}",
-          "**/node_modules/**"
-        );
-
-        // 🔥 Only scan files that had unused code before (faster recovery)
-        for (const file of files) {
-          try {
-            const unused = findUnusedVariables(file.fsPath);
-            unusedCache[file.fsPath] = unused.filter(
-              (item) => !globalUsedIdentifiers.has(item.name)
-            );
-          } catch {
-            unusedCache[file.fsPath] = [];
-          }
-        }
-
-        scheduleSidebarRefresh();
-
-        const activeEditor = vscode.window.activeTextEditor;
-        if (activeEditor) {
-          updateDiagnosticsFromCache(
-            activeEditor.document,
-            diagnostics,
-            decoration,
-            unusedCache[activeEditor.document.fileName] || []
-          );
-        }
+        await scanWorkspaceSafe(webviewProvider);
 
         isBulkOperation = false;
 
@@ -484,7 +352,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(diagnostics);
 }
 
-// 🔍 UPDATE FROM CACHE
+// 🔍 FROM CACHE
 function updateDiagnosticsFromCache(
   document: vscode.TextDocument,
   diagnostics: vscode.DiagnosticCollection,
@@ -492,9 +360,7 @@ function updateDiagnosticsFromCache(
   unused: any[]
 ) {
   const editor = vscode.window.activeTextEditor;
-  if (!editor || editor.document !== document) {
-    return;
-  }
+  if (!editor || editor.document !== document) return;
 
   const diags: vscode.Diagnostic[] = [];
   const decos: vscode.DecorationOptions[] = [];
@@ -503,13 +369,14 @@ function updateDiagnosticsFromCache(
     const line = item.loc.start.line - 1;
     const range = new vscode.Range(line, 0, line, 1000);
 
-    const d = new vscode.Diagnostic(
-      range,
-      `Unused: ${item.name}`,
-      vscode.DiagnosticSeverity.Warning
+    diags.push(
+      new vscode.Diagnostic(
+        range,
+        `Unused: ${item.name}`,
+        vscode.DiagnosticSeverity.Warning
+      )
     );
 
-    diags.push(d);
     decos.push({ range });
   });
 
@@ -517,16 +384,14 @@ function updateDiagnosticsFromCache(
   editor.setDecorations(decoration, decos);
 }
 
-// 🔍 NORMAL UPDATE
+// 🔍 NORMAL
 function updateDiagnostics(
   document: vscode.TextDocument,
   diagnostics: vscode.DiagnosticCollection,
   decoration: vscode.TextEditorDecorationType
 ) {
   const editor = vscode.window.activeTextEditor;
-  if (!editor || editor.document !== document) {
-    return;
-  }
+  if (!editor || editor.document !== document) return;
 
   const unused = unusedCache[document.fileName] || [];
 
@@ -537,13 +402,14 @@ function updateDiagnostics(
     const line = item.loc.start.line - 1;
     const range = new vscode.Range(line, 0, line, 1000);
 
-    const d = new vscode.Diagnostic(
-      range,
-      `Unused: ${item.name}`,
-      vscode.DiagnosticSeverity.Warning
+    diags.push(
+      new vscode.Diagnostic(
+        range,
+        `Unused: ${item.name}`,
+        vscode.DiagnosticSeverity.Warning
+      )
     );
 
-    diags.push(d);
     decos.push({ range });
   });
 
